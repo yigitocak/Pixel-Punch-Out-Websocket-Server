@@ -16,7 +16,7 @@ const io = new Server(server, {
         methods: ["GET", "POST"],
     },
 });
-const port = 5050;
+const port = process.env.PORT || 5050;
 
 // Globals
 const players = [];
