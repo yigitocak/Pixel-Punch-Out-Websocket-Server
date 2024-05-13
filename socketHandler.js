@@ -89,6 +89,9 @@ class SocketHandler {
     socket.on("disconnect", (reason) => {
       console.log("Disconnected:", socket.id, reason);
       this.removePlayer(socket);
+      setTimeout(() => {
+        this.io.emit("close")
+      }, 3000)
     });
 
     socket.on("getHit", (healthData) => {
@@ -203,6 +206,9 @@ class SocketHandler {
         }
 
         socket.off("death", handleDeath);
+        setTimeout(() => {
+          this.io.emit("close")
+        },3000)
       }
     };
 
@@ -211,17 +217,22 @@ class SocketHandler {
 
   listenForNameRequests(socket){
     socket.on("getNames", () => {
-      if (this.players[0].name && this.players[1].name){
-        socket.emit("names", [
-          {
-            id: this.players[0].id,
-            name: this.players[0].name
-          },
-          {
-            id: this.players[1].id,
-            name: this.players[1].name
-          }
-        ])
+      if (this.players.length === 2){
+        if (this.players[0].name && this.players[1].name){
+          socket.emit("names", [
+            {
+              id: this.players[0].id,
+              name: this.players[0].name
+            },
+            {
+              id: this.players[1].id,
+              name: this.players[1].name
+            }
+          ])
+        }
+        else{
+          socket.emit("names", false)
+        }
       }
       else{
         socket.emit("names", false)
