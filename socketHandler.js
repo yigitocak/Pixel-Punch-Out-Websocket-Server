@@ -10,7 +10,7 @@ class SocketHandler {
     this.started = false;
     this.players = players;
     this.inputsMap = inputsMap;
-    this.deadHandled = false;
+    this.deathHandled = false;
   }
 
   handleConnection() {
@@ -25,6 +25,7 @@ class SocketHandler {
         this.listenForBackgroundRequest(socket);
         this.listenForCountdown(socket);
         this.listenForDeath(socket);
+        this.listenForNameRequests(socket)
       }
     });
   }
@@ -71,7 +72,7 @@ class SocketHandler {
     if (this.players.length === 2 && !this.started) {
       this.io.emit("playersReady");
       this.started = true;
-      console.log("yolladim abi");
+      console.log("Game Started");
     }
   }
 
@@ -88,6 +89,9 @@ class SocketHandler {
     socket.on("disconnect", (reason) => {
       console.log("Disconnected:", socket.id, reason);
       this.removePlayer(socket);
+      setTimeout(() => {
+        this.io.emit("close")
+      }, 3000)
     });
 
     socket.on("getHit", (healthData) => {
@@ -177,11 +181,6 @@ class SocketHandler {
         const aliveUsername = alivePlayer.name;
         const deadUsername = deadPlayer.name;
 
-        console.log(SECRET_KEY);
-        console.log(API_URL);
-        console.log(aliveUsername);
-        console.log(deadUsername);
-
         // Incrementing Wins
         try {
           const response = axios.post(
@@ -207,11 +206,39 @@ class SocketHandler {
         }
 
         socket.off("death", handleDeath);
+        setTimeout(() => {
+          this.io.emit("close")
+        },3000)
       }
     };
 
     socket.on("death", handleDeath);
   }
+
+  listenForNameRequests(socket){
+    socket.on("getNames", () => {
+      if (this.players.length === 2){
+        if (this.players[0].name && this.players[1].name){
+          socket.emit("names", [
+            {
+              id: this.players[0].id,
+              name: this.players[0].name
+            },
+            {
+              id: this.players[1].id,
+              name: this.players[1].name
+            }
+          ])
+        }
+        else{
+          socket.emit("names", false)
+        }
+      }
+      else{
+        socket.emit("names", false)
+      }
+    })
+    }
 }
 
 export default SocketHandler;
