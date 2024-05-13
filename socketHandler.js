@@ -219,7 +219,7 @@ class SocketHandler {
           },
           {
             id: this.players[1].id,
-            name: this.players[1].id
+            name: this.players[1].name
           }
         ])
       }
