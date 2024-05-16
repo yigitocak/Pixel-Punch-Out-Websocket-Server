@@ -18,14 +18,17 @@ class SocketHandler {
       console.log(`A user connected ${socket.id}`);
       if (this.players.length === 2) {
         socket.emit("ConnectionRefused", "Room is full");
-        socket.disconnect();
+        setTimeout(() => {
+          socket.emit("close");
+          socket.disconnect();
+        }, 3000);
       } else {
         this.addPlayer(socket);
         this.setupPlayerListeners(socket);
         this.listenForBackgroundRequest(socket);
         this.listenForCountdown(socket);
         this.listenForDeath(socket);
-        this.listenForNameRequests(socket)
+        this.listenForNameRequests(socket);
       }
     });
   }
@@ -72,7 +75,6 @@ class SocketHandler {
     if (this.players.length === 2 && !this.started) {
       this.io.emit("playersReady");
       this.started = true;
-      console.log("Game Started");
     }
   }
 
@@ -90,8 +92,8 @@ class SocketHandler {
       console.log("Disconnected:", socket.id, reason);
       this.removePlayer(socket);
       setTimeout(() => {
-        this.io.emit("close")
-      }, 3000)
+        this.io.emit("close");
+      }, 3000);
     });
 
     socket.on("getHit", (healthData) => {
@@ -141,30 +143,47 @@ class SocketHandler {
 
   listenForCountdown(socket) {
     socket.on("startCountdown", () => {
-      setTimeout(() => {
-        this.io.emit(
-            "countdown3",
-            `${this.players[0].name} vs ${this.players[1].name}`,
+      // Check if there are exactly two players and both have names
+      if (
+          this.players.length === 2 &&
+          this.players[0] &&
+          this.players[1] &&
+          this.players[0].name &&
+          this.players[1].name
+      ) {
+        setTimeout(() => {
+          this.io.emit(
+              "countdown3",
+              `${this.players[0].name} vs ${this.players[1].name}`,
+          );
+          console.log("3");
+        }, 1000);
+
+        // Emit countdown2 after 2 seconds
+        setTimeout(() => {
+          socket.emit("countdown2");
+          console.log("2");
+        }, 2000);
+
+        // Emit countdown1 after 3 seconds
+        setTimeout(() => {
+          socket.emit("countdown1");
+          console.log("1");
+        }, 3000);
+
+        // Emit go after 4 seconds
+        setTimeout(() => {
+          socket.emit("startGame", 99);
+        }, 4000);
+      } else {
+        console.log(
+            "Countdown aborted: not enough players or players' names are not set.",
         );
-        console.log("3");
-      }, 1000);
-
-      // Emit countdown2 after 2 seconds
-      setTimeout(() => {
-        socket.emit("countdown2");
-        console.log("2");
-      }, 2000);
-
-      // Emit countdown1 after 3 seconds
-      setTimeout(() => {
-        socket.emit("countdown1");
-        console.log("1");
-      }, 3000);
-
-      // Emit go after 4 seconds
-      setTimeout(() => {
-        socket.emit("startGame", 99);
-      }, 4000);
+        socket.emit(
+            "CountdownAborted",
+            "Not enough players or players' names are not set.",
+        );
+      }
     });
   }
 
@@ -207,38 +226,36 @@ class SocketHandler {
 
         socket.off("death", handleDeath);
         setTimeout(() => {
-          this.io.emit("close")
-        },3000)
+          this.io.emit("close");
+        }, 3000);
       }
     };
 
     socket.on("death", handleDeath);
   }
 
-  listenForNameRequests(socket){
+  listenForNameRequests(socket) {
     socket.on("getNames", () => {
-      if (this.players.length === 2){
-        if (this.players[0].name && this.players[1].name){
+      if (this.players.length === 2) {
+        if (this.players[0].name && this.players[1].name) {
           socket.emit("names", [
             {
               id: this.players[0].id,
-              name: this.players[0].name
+              name: this.players[0].name,
             },
             {
               id: this.players[1].id,
-              name: this.players[1].name
-            }
-          ])
+              name: this.players[1].name,
+            },
+          ]);
+        } else {
+          socket.emit("names", false);
         }
-        else{
-          socket.emit("names", false)
-        }
+      } else {
+        socket.emit("names", false);
       }
-      else{
-        socket.emit("names", false)
-      }
-    })
-    }
+    });
+  }
 }
 
 export default SocketHandler;
