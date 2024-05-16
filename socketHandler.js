@@ -66,6 +66,28 @@ class SocketHandler {
       const player = this.players.find((p) => p.id === nameData.id);
       if (player) {
         player.name = nameData.name;
+
+        // Check if the same user is trying to play against themselves
+        if (this.players.length === 2 && this.players[0].name && this.players[1].name) {
+          if (this.players[0].name === this.players[1].name) {
+            console.log("Same user trying to play against themselves.");
+            this.io.emit("SameUserError", "You cannot play against yourself.");
+
+            // Disconnect both players and clean up
+            this.players.forEach(p => {
+              const sock = this.io.sockets.sockets.get(p.id);
+              if (sock) {
+                sock.emit("close");
+                sock.disconnect();
+              }
+            });
+            this.players = [];
+            this.inputsMap = {};
+            this.started = false;
+            this.deathHandled = false;
+            return;
+          }
+        }
       }
     });
 
