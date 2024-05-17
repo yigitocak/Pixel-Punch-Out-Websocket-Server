@@ -201,7 +201,7 @@ class SocketHandler {
         const deadUsername = deadPlayer.name;
 
         try {
-          await axios.post(`${API_URL}/profiles/${aliveUsername}/wins`, {
+          await axios.post(`${API_URL}profiles/${aliveUsername}/wins`, {
             secret: SECRET_KEY,
           });
         } catch (err) {
@@ -209,7 +209,7 @@ class SocketHandler {
         }
 
         try {
-          await axios.post(`${API_URL}/profiles/${deadUsername}/losses`, {
+          await axios.post(`${API_URL}profiles/${deadUsername}/losses`, {
             secret: SECRET_KEY,
           });
         } catch (err) {
