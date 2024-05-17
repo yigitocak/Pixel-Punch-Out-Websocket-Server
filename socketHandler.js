@@ -60,6 +60,7 @@ class SocketHandler {
   setupPlayerListeners(socket) {
     socket.on("inputs", (inputs) => {
       this.inputsMap[socket.id] = inputs;
+      this.io.emit("playerInputs", this.inputsMap);
     });
 
     socket.on("setName", (nameData) => {
@@ -67,14 +68,16 @@ class SocketHandler {
       if (player) {
         player.name = nameData.name;
 
-        // Check if the same user is trying to play against themselves
-        if (this.players.length === 2 && this.players[0].name && this.players[1].name) {
+        if (
+            this.players.length === 2 &&
+            this.players[0].name &&
+            this.players[1].name
+        ) {
           if (this.players[0].name === this.players[1].name) {
             console.log("Same user trying to play against themselves.");
             this.io.emit("SameUserError", "You cannot play against yourself.");
 
-            // Disconnect both players and clean up
-            this.players.forEach(p => {
+            this.players.forEach((p) => {
               const sock = this.io.sockets.sockets.get(p.id);
               if (sock) {
                 sock.emit("close");
@@ -111,6 +114,7 @@ class SocketHandler {
         socket.emit("NotEnoughPlayers", "Waiting for another player");
       } else {
         this.io.emit("startGame", 99);
+        this.io.emit("players", this.players); // Send initial player data
       }
     });
   }
@@ -145,18 +149,26 @@ class SocketHandler {
 
   listenForCountdown(socket) {
     socket.on("startCountdown", () => {
-      if (this.players.length === 2 && this.players.every(p => p.name)) {
+      if (this.players.length === 2 && this.players.every((p) => p.name)) {
         this.startCountdownSequence();
       } else {
-        console.log("Countdown aborted: not enough players or players' names are not set.");
-        socket.emit("CountdownAborted", "Not enough players or players' names are not set.");
+        console.log(
+            "Countdown aborted: not enough players or players' names are not set.",
+        );
+        socket.emit(
+            "CountdownAborted",
+            "Not enough players or players' names are not set.",
+        );
       }
     });
   }
 
   startCountdownSequence() {
     setTimeout(() => {
-      this.io.emit("countdown3", `${this.players[0].name} vs ${this.players[1].name}`);
+      this.io.emit(
+          "countdown3",
+          `${this.players[0].name} vs ${this.players[1].name}`,
+      );
       console.log("3");
     }, 1000);
 
@@ -188,18 +200,20 @@ class SocketHandler {
         const aliveUsername = alivePlayer.name;
         const deadUsername = deadPlayer.name;
 
-        // Incrementing Wins
         try {
-          await axios.post(`${API_URL}/profiles/${aliveUsername}/wins`, { secret: SECRET_KEY });
+          await axios.post(`${API_URL}/profiles/${aliveUsername}/wins`, {
+            secret: SECRET_KEY,
+          });
         } catch (err) {
-          console.error('Error incrementing wins:', err);
+          console.error("Error incrementing wins:", err);
         }
 
-        // Incrementing Losses
         try {
-          await axios.post(`${API_URL}/profiles/${deadUsername}/losses`, { secret: SECRET_KEY });
+          await axios.post(`${API_URL}/profiles/${deadUsername}/losses`, {
+            secret: SECRET_KEY,
+          });
         } catch (err) {
-          console.error('Error incrementing losses:', err);
+          console.error("Error incrementing losses:", err);
         }
 
         socket.off("death", handleDeath);
@@ -214,8 +228,11 @@ class SocketHandler {
 
   listenForNameRequests(socket) {
     socket.on("getNames", () => {
-      if (this.players.length === 2 && this.players.every(p => p.name)) {
-        socket.emit("names", this.players.map(p => ({ id: p.id, name: p.name })));
+      if (this.players.length === 2 && this.players.every((p) => p.name)) {
+        socket.emit(
+            "names",
+            this.players.map((p) => ({ id: p.id, name: p.name })),
+        );
       } else {
         socket.emit("names", false);
       }
