@@ -15,88 +15,98 @@ class SocketHandler {
 
   handleConnection() {
     this.io.on("connection", (socket) => {
-      console.log(`A user connected ${socket.id}`);
+      console.log(`A user connected: ${socket.id}`);
       if (this.players.length === 2) {
         socket.emit("ConnectionRefused", "Room is full");
-        socket.disconnect();
+        setTimeout(() => {
+          socket.emit("close");
+          socket.disconnect();
+        }, 3000);
       } else {
         this.addPlayer(socket);
         this.setupPlayerListeners(socket);
         this.listenForBackgroundRequest(socket);
         this.listenForCountdown(socket);
         this.listenForDeath(socket);
-        this.listenForNameRequests(socket)
+        this.listenForNameRequests(socket);
       }
     });
   }
 
   addPlayer(socket) {
-    if (this.players.length === 0) {
-      this.players.push({
-        name: null,
-        id: socket.id,
-        x: 65,
-        y: 330,
-        health: 100,
-        velocity: {
-          x: 0,
-          y: 0,
-        },
-      });
-      this.inputsMap[socket.id] = {
-        up: false,
-        left: false,
-        right: false,
-        attack: false,
-      };
-    } else {
-      this.players.push({
-        name: null,
-        id: socket.id,
-        x: 950,
-        y: 330,
-        health: 100,
-        velocity: {
-          x: 0,
-          y: 0,
-        },
-      });
-      this.inputsMap[socket.id] = {
-        up: false,
-        left: false,
-        right: false,
-        attack: false,
-      };
-    }
+    const playerData = {
+      name: null,
+      id: socket.id,
+      x: this.players.length === 0 ? 65 : 950,
+      y: 330,
+      health: 100,
+      velocity: { x: 0, y: 0 },
+    };
+
+    this.players.push(playerData);
+    this.inputsMap[socket.id] = {
+      up: false,
+      left: false,
+      right: false,
+      attack: false,
+    };
 
     if (this.players.length === 2 && !this.started) {
       this.io.emit("playersReady");
       this.started = true;
-      console.log("Game Started");
     }
   }
 
   setupPlayerListeners(socket) {
     socket.on("inputs", (inputs) => {
       this.inputsMap[socket.id] = inputs;
+      this.io.emit("playerInputs", this.inputsMap);
     });
 
     socket.on("setName", (nameData) => {
-      let player = this.players.find((p) => p.id === nameData.id);
-      player.name = nameData.name;
+      const player = this.players.find((p) => p.id === nameData.id);
+      if (player) {
+        player.name = nameData.name;
+
+        if (
+            this.players.length === 2 &&
+            this.players[0].name &&
+            this.players[1].name
+        ) {
+          if (this.players[0].name === this.players[1].name) {
+            console.log("Same user trying to play against themselves.");
+            this.io.emit("SameUserError", "You cannot play against yourself.");
+
+            this.players.forEach((p) => {
+              const sock = this.io.sockets.sockets.get(p.id);
+              if (sock) {
+                sock.emit("close");
+                sock.disconnect();
+              }
+            });
+            this.players = [];
+            this.inputsMap = {};
+            this.started = false;
+            this.deathHandled = false;
+            return;
+          }
+        }
+      }
     });
 
     socket.on("disconnect", (reason) => {
       console.log("Disconnected:", socket.id, reason);
       this.removePlayer(socket);
       setTimeout(() => {
-        this.io.emit("close")
-      }, 3000)
+        this.io.emit("close");
+      }, 3000);
     });
 
     socket.on("getHit", (healthData) => {
-      let player = this.players.find((p) => p.id === healthData.id);
-      player.health = healthData.health;
+      const player = this.players.find((p) => p.id === healthData.id);
+      if (player) {
+        player.health = healthData.health;
+      }
     });
 
     socket.on("startGameRequest", () => {
@@ -104,6 +114,7 @@ class SocketHandler {
         socket.emit("NotEnoughPlayers", "Waiting for another player");
       } else {
         this.io.emit("startGame", 99);
+        this.io.emit("players", this.players); // Send initial player data
       }
     });
   }
@@ -126,46 +137,54 @@ class SocketHandler {
   listenForBackgroundRequest(socket) {
     socket.on("getBackground", () => {
       const serverBackgroundData = {
-        position: {
-          x: 0,
-          y: 0,
-        },
+        position: { x: 0, y: 0 },
         imageSrc: `https://pixel-punch-out-server-e08f7052857e.herokuapp.com/img/backgrounds/dojo.png`,
         scale: 1,
         framesMax: 37,
       };
       socket.emit("backgroundData", serverBackgroundData);
-      console.log("sent background");
+      console.log("Sent background data.");
     });
   }
 
   listenForCountdown(socket) {
     socket.on("startCountdown", () => {
-      setTimeout(() => {
-        this.io.emit(
-            "countdown3",
-            `${this.players[0].name} vs ${this.players[1].name}`,
+      if (this.players.length === 2 && this.players.every((p) => p.name)) {
+        this.startCountdownSequence();
+      } else {
+        console.log(
+            "Countdown aborted: not enough players or players' names are not set.",
         );
-        console.log("3");
-      }, 1000);
-
-      // Emit countdown2 after 2 seconds
-      setTimeout(() => {
-        socket.emit("countdown2");
-        console.log("2");
-      }, 2000);
-
-      // Emit countdown1 after 3 seconds
-      setTimeout(() => {
-        socket.emit("countdown1");
-        console.log("1");
-      }, 3000);
-
-      // Emit go after 4 seconds
-      setTimeout(() => {
-        socket.emit("startGame", 99);
-      }, 4000);
+        socket.emit(
+            "CountdownAborted",
+            "Not enough players or players' names are not set.",
+        );
+      }
     });
+  }
+
+  startCountdownSequence() {
+    setTimeout(() => {
+      this.io.emit(
+          "countdown3",
+          `${this.players[0].name} vs ${this.players[1].name}`,
+      );
+      console.log("3");
+    }, 1000);
+
+    setTimeout(() => {
+      this.io.emit("countdown2");
+      console.log("2");
+    }, 2000);
+
+    setTimeout(() => {
+      this.io.emit("countdown1");
+      console.log("1");
+    }, 3000);
+
+    setTimeout(() => {
+      this.io.emit("startGame", 99);
+    }, 4000);
   }
 
   listenForDeath(socket) {
@@ -181,64 +200,44 @@ class SocketHandler {
         const aliveUsername = alivePlayer.name;
         const deadUsername = deadPlayer.name;
 
-        // Incrementing Wins
         try {
-          const response = axios.post(
-              `${API_URL}profiles/${aliveUsername}/wins`,
-              {
-                secret: SECRET_KEY,
-              },
-          );
+          await axios.post(`${API_URL}profiles/${aliveUsername}/wins`, {
+            secret: SECRET_KEY,
+          });
         } catch (err) {
-          console.log(err);
+          console.error("Error incrementing wins:", err);
         }
 
-        // Incrementing Losses
         try {
-          const response = axios.post(
-              `${API_URL}profiles/${deadUsername}/losses`,
-              {
-                secret: SECRET_KEY,
-              },
-          );
+          await axios.post(`${API_URL}profiles/${deadUsername}/losses`, {
+            secret: SECRET_KEY,
+          });
         } catch (err) {
-          console.log(err);
+          console.error("Error incrementing losses:", err);
         }
 
         socket.off("death", handleDeath);
         setTimeout(() => {
-          this.io.emit("close")
-        },3000)
+          this.io.emit("close");
+        }, 3000);
       }
     };
 
     socket.on("death", handleDeath);
   }
 
-  listenForNameRequests(socket){
+  listenForNameRequests(socket) {
     socket.on("getNames", () => {
-      if (this.players.length === 2){
-        if (this.players[0].name && this.players[1].name){
-          socket.emit("names", [
-            {
-              id: this.players[0].id,
-              name: this.players[0].name
-            },
-            {
-              id: this.players[1].id,
-              name: this.players[1].name
-            }
-          ])
-        }
-        else{
-          socket.emit("names", false)
-        }
+      if (this.players.length === 2 && this.players.every((p) => p.name)) {
+        socket.emit(
+            "names",
+            this.players.map((p) => ({ id: p.id, name: p.name })),
+        );
+      } else {
+        socket.emit("names", false);
       }
-      else{
-        socket.emit("names", false)
-      }
-    })
-    }
+    });
+  }
 }
 
 export default SocketHandler;
